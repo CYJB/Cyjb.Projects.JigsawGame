@@ -1,0 +1,16 @@
+# Build Folders (you can keep bin if you'd like, to store dlls and pdbs)
+bin
+obj
+Properties
+*.pdb
+
+# mstest test results
+TestResults
+
+# my test project
+ConsoleTest
+
+# files
+*.suo
+*.snk
+*.vspx
