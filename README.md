@@ -8,9 +8,3 @@ JigsawGame
 游戏操作很简单，用户选定的图片会被分割为很多拼图碎片，游戏过程就是拖动拼图碎片，并拼成完整的图案。关于游戏的更多说明，请参见我的[博客](http://www.cnblogs.com/cyjb/p/JigsawGame.html)。
 
 <a rel="license" href="http://creativecommons.org/licenses/by-nc-nd/3.0/cn/"><img alt="知识共享许可协议" style="border-width:0" src="http://i.creativecommons.org/l/by-nc-nd/3.0/cn/88x31.png" /></a><br />本作品采用<a rel="license" href="http://creativecommons.org/licenses/by-nc-nd/3.0/cn/">知识共享署名-非商业性使用-禁止演绎 3.0 中国大陆许可协议</a>进行许可。
-
-# 版本日志 #
-
-## version 1.0 ##
-
-2013.9.20 发布
