@@ -74,9 +74,9 @@
 			// 
 			this.pbxHelpLink.BackColor = System.Drawing.Color.Transparent;
 			this.pbxHelpLink.Cursor = System.Windows.Forms.Cursors.Hand;
-			this.pbxHelpLink.Location = new System.Drawing.Point(139, 327);
+			this.pbxHelpLink.Location = new System.Drawing.Point(212, 327);
 			this.pbxHelpLink.Name = "pbxHelpLink";
-			this.pbxHelpLink.Size = new System.Drawing.Size(66, 25);
+			this.pbxHelpLink.Size = new System.Drawing.Size(62, 25);
 			this.pbxHelpLink.TabIndex = 5;
 			this.pbxHelpLink.TabStop = false;
 			this.pbxHelpLink.Click += new System.EventHandler(this.pbxHelpLink_Click);
