@@ -50,12 +50,11 @@ namespace Cyjb.Projects.JigsawGame
 		/// <param name="devices">设备管理器。</param>
 		public MainForm(DeviceManager devices)
 		{
-			// 窗体设置需要在添加侦听器之前。
-			this.Size = JigsawSetting.Default.MainSize;
 			this.Location = JigsawSetting.Default.MainLocation;
-			this.WindowState = JigsawSetting.Default.MainState;
-			this.deviceManager = devices;
 			InitializeComponent();
+			this.deviceManager = devices;
+			this.ClientSize = JigsawSetting.Default.MainSize;
+			this.WindowState = JigsawSetting.Default.MainState;
 			this.gameManager = new GameManager(devices, this.renderPanel,
 				EnumExt.Parse<JigsawRendererType>(JigsawSetting.Default.Renderer));
 			InitGameManager();
