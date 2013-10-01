@@ -2,7 +2,6 @@
 using System.ComponentModel;
 using System.Windows.Forms;
 using SharpDX;
-using SharpDX.Direct2D1;
 using SharpDX.Windows;
 using Point = System.Drawing.Point;
 using Size = System.Drawing.Size;
@@ -15,13 +14,9 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 	public sealed class JigsawRenderPanel : RenderControl
 	{
 		/// <summary>
-		/// Direct2D 工厂。
+		/// 设备管理器。
 		/// </summary>
-		private Factory d2DFactory;
-		/// <summary>
-		/// Direct2D 渲染目标。
-		/// </summary>
-		private WindowRenderTarget renderTarget;
+		private DeviceManager devices;
 		/// <summary>
 		/// 自动滚动的定时器。
 		/// </summary>
@@ -67,51 +62,16 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 		/// </summary>
 		public event EventHandler JigsawScaleChanged;
 		/// <summary>
-		/// 获取或设置 Direct2D 工厂。
+		/// 获取或设置设备管理器。
 		/// </summary>
-		[Browsable(false)]
-		public Factory D2DFactory
+		public DeviceManager Devices
 		{
-			get { return this.d2DFactory; }
+			get { return this.devices; }
 			set
 			{
-				if (value == null)
-				{
-					return;
-				}
-				this.d2DFactory = value;
-				if (this.renderTarget != null)
-				{
-					this.renderTarget.Dispose();
-				}
-				// 渲染参数。
-				RenderTargetProperties renderProps = new RenderTargetProperties
-				{
-					PixelFormat = SharpDXUtility.D2D1PixelFormat,
-					Usage = RenderTargetUsage.None,
-					Type = RenderTargetType.Default
-				};
-				// 渲染目标属性。
-				HwndRenderTargetProperties hwndProps = new HwndRenderTargetProperties()
-				{
-					Hwnd = this.Handle,
-					PixelSize = new Size2(this.ClientSize.Width, this.ClientSize.Height),
-					PresentOptions = PresentOptions.None
-				};
-				// 渲染目标。
-				renderTarget = new WindowRenderTarget(value, renderProps, hwndProps)
-				{
-					AntialiasMode = AntialiasMode.PerPrimitive
-				};
+				this.devices = value;
+				devices.CreateRenderTarget(this);
 			}
-		}
-		/// <summary>
-		/// 获取 Direct2D 渲染目标。
-		/// </summary>
-		[Browsable(false)]
-		public RenderTarget RenderTarget
-		{
-			get { return this.renderTarget; }
 		}
 		/// <summary>
 		/// 获取或设置拼图图片至边距的最小距离。
@@ -234,9 +194,9 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 		/// </summary>
 		protected override void OnSizeChanged(EventArgs e)
 		{
-			if (renderTarget != null)
+			if (devices != null)
 			{
-				renderTarget.Resize(new Size2(this.ClientSize.Width, this.ClientSize.Height));
+				devices.ResizeRenderTarget(this);
 				this.UpdateSize();
 			}
 			base.OnSizeChanged(e);

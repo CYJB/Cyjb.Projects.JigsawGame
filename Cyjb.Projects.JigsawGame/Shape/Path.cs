@@ -20,9 +20,11 @@ namespace Cyjb.Projects.JigsawGame.Shape
 		/// 使用指定的起始点、重心和权重初始化 <see cref="Path"/> 类的新实例。
 		/// </summary>
 		/// <param name="start">路径的起始点。</param>
-		public Path(Vector2 start)
+		/// <param name="isBlack">当前路径是否为黑色。</param>
+		public Path(Vector2 start, bool isBlack)
 		{
 			this.StartPoint = start;
+			this.IsBlack = isBlack;
 		}
 		/// <summary>
 		/// 获取路径的起始点。
@@ -36,6 +38,10 @@ namespace Cyjb.Projects.JigsawGame.Shape
 		/// 获取路或设置径的权重。
 		/// </summary>
 		public float Weight { get; set; }
+		/// <summary>
+		/// 获取当前路径是否为黑色。
+		/// </summary>
+		public bool IsBlack { get; private set; }
 		/// <summary>
 		/// 向当前路径中添加一条直线段。
 		/// </summary>
@@ -116,6 +122,25 @@ namespace Cyjb.Projects.JigsawGame.Shape
 			return new GeometryGroup(factory, FillMode.Winding, geometries);
 		}
 		/// <summary>
+		/// 返回当前路径中包含的形状的颜色（黑/白）。
+		/// </summary>
+		/// <returns>表示颜色的数组。</returns>
+		public bool[] GetColors()
+		{
+			bool[] colors = new bool[figureCount];
+			colors[0] = this.IsBlack;
+			int cnt = this.Count;
+			for (int i = 0, idx = 1; i < cnt; i++)
+			{
+				EndFigureSegment end = this[i] as EndFigureSegment;
+				if (end != null)
+				{
+					colors[idx++] = end.IsBlack;
+				}
+			}
+			return colors;
+		}
+		/// <summary>
 		/// 将指定的路径与当前的路径合并。
 		/// </summary>
 		/// <param name="path">要合并的路径。</param>
@@ -125,7 +150,7 @@ namespace Cyjb.Projects.JigsawGame.Shape
 			this.Center = new Vector2((this.Center.X * this.Weight + path.Center.X * path.Weight) / sum,
 				(this.Center.Y * this.Weight + path.Center.Y * path.Weight) / sum);
 			this.Weight = sum;
-			this.Add(new EndFigureSegment(path.StartPoint));
+			this.Add(new EndFigureSegment(path.StartPoint, path.IsBlack));
 			this.AddRange(path);
 			this.figureCount += path.figureCount;
 		}

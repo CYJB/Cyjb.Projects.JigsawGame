@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Cyjb.Projects.JigsawGame.Jigsaw;
 using Cyjb.Projects.JigsawGame.Renderer;
@@ -23,7 +25,7 @@ namespace Cyjb.Projects.JigsawGame
 		/// <summary>
 		/// 设备管理器。
 		/// </summary>
-		private DeviceManager deviceManager;
+		private DeviceManager devices;
 		/// <summary>
 		/// Direct2D 的渲染目标。
 		/// </summary>
@@ -131,18 +133,21 @@ namespace Cyjb.Projects.JigsawGame
 		/// <param name="devices">设备管理器。</param>
 		public GameManager(DeviceManager devices, JigsawRenderPanel renderPanel, JigsawRendererType rendererType)
 		{
-			this.deviceManager = devices;
+			this.devices = devices;
 			this.renderPanel = renderPanel;
 			// 初始化设备。
-			this.renderPanel.D2DFactory = deviceManager.D2DFactory;
+			this.renderPanel.Devices = devices;
 			this.renderPanel.Paint += this.renderPanel_Paint;
-			this.renderTarget = deviceManager.RenderTarget = this.renderPanel.RenderTarget;
+			this.renderTarget = devices.RenderTarget;
 			// 初始化画刷。
 			selectionRectBrush = new SolidColorBrush(renderTarget, Color.Black);
-			selectionRectStyle = new StrokeStyle(this.deviceManager.D2DFactory,
+			selectionRectStyle = new StrokeStyle(this.devices.D2DFactory,
 				new StrokeStyleProperties() { DashStyle = DashStyle.Dash });
 			this.RendererType = rendererType;
 		}
+
+		#region 游戏状态
+
 		/// <summary>
 		/// 获取或设置拼图渲染器的类型。
 		/// </summary>
@@ -151,18 +156,22 @@ namespace Cyjb.Projects.JigsawGame
 			get { return this.rendererType; }
 			set
 			{
-				if (!this.deviceManager.SupportD3D)
+				if (!this.devices.SupportD3D)
 				{
-					// 不支持 DirectX 3D，则只创建简单的拼图渲染器。
+					// 不支持 Direct3D，则只创建简单的拼图渲染器。
 					value = JigsawRendererType.Simple;
 				}
 				if (this.rendererType != value || this.renderer == null)
 				{
 					this.rendererType = value;
-					this.renderer = JigsawRenderer.CreateRenderer(rendererType, this.deviceManager);
+					if (this.renderer != null)
+					{
+						this.renderer.Dispose();
+					}
+					this.renderer = JigsawRenderer.CreateRenderer(value, this.devices);
 					if (this.hasGame)
 					{
-						this.renderer.PrepareRender(gameInfo.ImageData, pieces, gameInfo.Rotatable);
+						this.renderer.PrepareRender(gameInfo.ImageData, pieces, gameInfo.Rotatable, CancellationToken.None);
 					}
 				}
 			}
@@ -180,14 +189,8 @@ namespace Cyjb.Projects.JigsawGame
 		/// </summary>
 		public System.Drawing.Color BackgroundColor
 		{
-			get
-			{
-				return this.backgroundColor.ToColor();
-			}
-			set
-			{
-				this.backgroundColor = value.ToColor4();
-			}
+			get { return this.backgroundColor.ToColor(); }
+			set { this.backgroundColor = value.ToColor4(); }
 		}
 		/// <summary>
 		/// 获取或设置是否只显示边界拼图碎片。
@@ -256,6 +259,8 @@ namespace Cyjb.Projects.JigsawGame
 			get { return this.gameInfo; }
 		}
 
+		#endregion // 游戏状态
+
 		#region IDisposable 成员
 
 		/// <summary>
@@ -271,7 +276,7 @@ namespace Cyjb.Projects.JigsawGame
 			this.selectionRectBrush.Dispose();
 			this.selectionRectStyle.Dispose();
 			this.renderTarget.Dispose();
-			this.deviceManager.Dispose();
+			this.devices.Dispose();
 			GC.SuppressFinalize(this);
 		}
 
@@ -283,38 +288,53 @@ namespace Cyjb.Projects.JigsawGame
 		/// 开始一个拼图游戏。
 		/// </summary>
 		/// <remarks>开始游戏前，需要保证之前的游戏已结束。</remarks>
-		/// <param name="pieces">拼图碎片集合。</param>
+		/// <param name="jigsawPieces">拼图碎片集合。</param>
 		/// <param name="info">游戏信息。</param>
-		public void StartGame(JigsawPieceCollection jigsawPieces, JigsawInfo info)
+		/// <param name="ct">取消任务的通知。</param>
+		/// <returns>开始拼图游戏的任务。</returns>
+		public Task StartGame(JigsawPieceCollection jigsawPieces, JigsawInfo info, CancellationToken ct)
 		{
 			Debug.Assert(!this.hasGame);
 			this.pieces = jigsawPieces;
 			this.gameInfo = info;
-			this.background = deviceManager.WicFactory.LoadBitmapFromBytes(gameInfo.ImageData, this.renderTarget);
+			return new Task(() => this.StartGame(ct), ct);
+		}
+		/// <summary>
+		/// 开始一个拼图游戏。
+		/// </summary>
+		/// <param name="ct">取消任务的通知。</param>
+		private void StartGame(CancellationToken ct)
+		{
+			this.background = devices.LoadBitmapFromBytes(gameInfo.ImageData);
 			this.imageSize = background.Size;
 			this.isDraging = this.isSelecting = false;
 			// 添加事件侦听器。
 			this.renderPanel.JigsawRegionChanged += this.renderPanel_JigsawRegionChanged;
 			this.renderPanel.JigsawScaleChanging += this.renderPanel_JigsawScaleChanging;
-			this.renderPanel.MouseDown += this.renderPanel_MouseDown;
-			this.renderPanel.MouseMove += this.renderPanel_MouseMove;
-			this.renderPanel.MouseUp += this.renderPanel_MouseUp;
 			// 设置渲染区域。
-			this.renderPanel.ImageSize = imageSize;
-			this.renderPanel.SetJigsawScale(info.Scale, new Point(0, 0));
-			this.renderPanel.AutoScrollPosition = info.ScrollPosition;
+			this.renderPanel.Invoke(new Action(() =>
+			{
+				this.renderPanel.ImageSize = imageSize;
+				this.renderPanel.SetJigsawScale(this.gameInfo.Scale, new Point(0, 0));
+				this.renderPanel.AutoScrollPosition = this.gameInfo.ScrollPosition;
+			}));
 			if (this.gameInfo.UsedTime.Milliseconds == 0)
 			{
 				// 对于新游戏，重新分布拼图碎片。
-				this.pieces.SpreadPieces(renderPanel.JigsawRegion, info.Rotatable);
+				this.pieces.SpreadPieces(renderPanel.JigsawRegion, this.gameInfo.Rotatable);
 			}
 			this.UpdatePiecesVisible();
-			this.renderer.PrepareRender(gameInfo.ImageData, pieces, gameInfo.Rotatable);
+			ct.ThrowIfCancellationRequested();
+			this.renderer.PrepareRender(gameInfo.ImageData, pieces, gameInfo.Rotatable, ct);
+			ct.ThrowIfCancellationRequested();
 			this.hasGame = true;
 			this.gameChanged = true;
 			this.InvalidateAll();
 			this.startTime = DateTime.Now - gameInfo.UsedTime;
 			this.UpdateFinishedPercent();
+			this.renderPanel.MouseDown += this.renderPanel_MouseDown;
+			this.renderPanel.MouseMove += this.renderPanel_MouseMove;
+			this.renderPanel.MouseUp += this.renderPanel_MouseUp;
 		}
 		/// <summary>
 		/// 结束拼图游戏。
@@ -331,6 +351,7 @@ namespace Cyjb.Projects.JigsawGame
 			this.renderPanel.MouseDown -= this.renderPanel_MouseDown;
 			this.renderPanel.MouseMove -= this.renderPanel_MouseMove;
 			this.renderPanel.MouseUp -= this.renderPanel_MouseUp;
+			this.renderer.ClearResources();
 			this.pieces.Dispose();
 			this.pieces = null;
 		}
@@ -338,18 +359,20 @@ namespace Cyjb.Projects.JigsawGame
 		/// 打开拼图游戏。
 		/// </summary>
 		/// <param name="fileName">要打开的拼图游戏存档路径。</param>
-		public void OpenGame(string fileName)
+		/// <param name="ct">取消任务的通知。</param>
+		/// <returns>打开拼图游戏的任务。</returns>
+		public Task OpenGame(string fileName, CancellationToken ct)
 		{
 			using (FileStream stream = new FileStream(fileName, FileMode.Open, FileAccess.Read))
 			{
-				JigsawSerializeContext context = new JigsawSerializeContext(this.deviceManager);
+				JigsawSerializeContext context = new JigsawSerializeContext(this.devices);
 				BinaryFormatter formatter = new BinaryFormatter(null,
 					new StreamingContext(StreamingContextStates.File, context));
 				this.gameInfo = (JigsawInfo)formatter.Deserialize(stream);
 				this.pieces = (JigsawPieceCollection)formatter.Deserialize(stream);
 			}
-			this.StartGame(this.pieces, this.gameInfo);
 			this.gameChanged = false;
+			return this.StartGame(this.pieces, this.gameInfo, ct);
 		}
 		/// <summary>
 		/// 保存拼图游戏。
@@ -457,7 +480,7 @@ namespace Cyjb.Projects.JigsawGame
 		/// </summary>
 		private void renderPanel_Paint(object sender, PaintEventArgs e)
 		{
-			renderTarget.BeginDraw();
+			devices.BeginDraw();
 			renderTarget.Clear(this.backgroundColor);
 			if (this.hasGame)
 			{
@@ -478,7 +501,7 @@ namespace Cyjb.Projects.JigsawGame
 					renderTarget.DrawRectangle(selectRect, selectionRectBrush, 1f, selectionRectStyle);
 				}
 			}
-			renderTarget.EndDraw();
+			devices.EndDraw();
 		}
 		/// <summary>
 		/// 更新完成比例。

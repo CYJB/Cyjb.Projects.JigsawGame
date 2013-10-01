@@ -342,6 +342,14 @@ namespace Cyjb.Projects.JigsawGame.Jigsaw
 			}
 			piece.Dispose();
 		}
+		/// <summary>
+		/// 返回拼图碎片中包含的形状的颜色（黑/白）。
+		/// </summary>
+		/// <returns>表示颜色的数组。</returns>
+		public bool[] GetColors()
+		{
+			return this.shape.GetColors();
+		}
 
 		#region IDisposable 成员
 

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using Cyjb.Projects.JigsawGame.Jigsaw;
 using SharpDX;
 using SharpDX.Direct2D1;
@@ -95,6 +97,9 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 			InitEffects();
 			InitBrushes();
 		}
+
+		#region 初始化
+
 		/// <summary>
 		/// 初始化笔刷。
 		/// </summary>
@@ -133,6 +138,8 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 			bevelEffect.Coefficients = new Vector4(1.0f, 0.5f, 0.0f, 0.0f);
 		}
 
+		#endregion // 初始化
+
 		#region IDisposable 成员
 
 		/// <summary>
@@ -150,12 +157,12 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 			this.pointSpecularEffect.Dispose();
 			this.bevelLightEffect.Dispose();
 			this.bevelEffect.Dispose();
-			ClearShadowCache();
-			ClearImages();
 			base.Dispose(true);
 		}
 
 		#endregion // IDisposable 成员
+
+		#region 渲染器属性
 
 		/// <summary>
 		/// 获取拼图渲染器的类型。
@@ -217,48 +224,77 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 				selectedBrush.Color = value;
 			}
 		}
+
+		#endregion // 渲染器属性
+
 		/// <summary>
 		/// 准备渲染拼图碎片。
 		/// </summary>
 		/// <param name="imageData">拼图使用的图片数据。</param>
 		/// <param name="pieces">所有拼图碎片的集合。</param>
 		/// <param name="rotatable">拼图碎片是否可以旋转。</param>
-		public override void PrepareRender(byte[] imageData, IEnumerable<JigsawPiece> pieces, bool rotatable)
+		/// <param name="ct">取消任务的通知。</param>
+		public override void PrepareRender(byte[] imageData, JigsawPieceCollection pieces, bool rotatable,
+			CancellationToken ct)
 		{
-			base.PrepareRender(imageData, pieces, rotatable);
-			ClearShadowCache();
-			ClearImages();
-			using (Bitmap bitmap = LoadImage(this.DeviceContext))
+			base.PrepareRender(imageData, pieces, rotatable, ct);
+			ct.ThrowIfCancellationRequested();
+			imageSize = new Size2((int)this.Image.Size.Width, (int)this.Image.Size.Height);
+			using (Brush imageBrush = new BitmapBrush(this.DeviceContext, this.Image))
 			{
-				imageSize = new Size2((int)bitmap.Size.Width, (int)bitmap.Size.Height);
-				using (Brush imageBrush = new BitmapBrush(this.DeviceContext, bitmap))
+				using (Bitmap1 source = DeviceManager.CreateBitmap(imageSize))
 				{
-					this.images[0] = this.CreateImage(imageBrush, 0, pieces);
+					ct.ThrowIfCancellationRequested();
+					// 设置特效的输入。
+					bevelBaseEffect.SetInput(0, source, true);
+					bevelEffect.SetInput(0, source, true);
+					// 分别按黑色与白色创建拼图碎片特效。
+					List<Geometry> blacks = new List<Geometry>();
+					List<Geometry> whites = new List<Geometry>();
+					foreach (JigsawPiece piece in pieces)
+					{
+						Geometry[] geoms = piece.OriginalPath.GetSourceGeometry();
+						// 划分黑色与白色，他们分别是不相邻的。
+						bool[] colors = piece.GetColors();
+						for (int i = 0; i < colors.Length; i++)
+						{
+							if (colors[i])
+							{
+								blacks.Add(geoms[i]);
+							}
+							else
+							{
+								whites.Add(geoms[i]);
+							}
+						}
+					}
+					ct.ThrowIfCancellationRequested();
+					pointSpecularEffect.LightPosition = new Vector3(0, 0, 0);
+					this.images[0] = this.CreateImage(imageBrush, source, blacks, whites, ct);
 					if (rotatable)
 					{
-						this.images[1] = this.CreateImage(imageBrush, 90, pieces);
-						this.images[2] = this.CreateImage(imageBrush, 180, pieces);
-						this.images[3] = this.CreateImage(imageBrush, 270, pieces);
+						// 生成不同旋转角度的图像，使用不同的光照情况。
+						pointSpecularEffect.LightPosition = new Vector3(0, imageSize.Height, 0);
+						this.images[1] = this.CreateImage(imageBrush, source, blacks, whites, ct);
+						pointSpecularEffect.LightPosition = new Vector3(imageSize.Width, imageSize.Height, 0);
+						this.images[2] = this.CreateImage(imageBrush, source, blacks, whites, ct);
+						pointSpecularEffect.LightPosition = new Vector3(imageSize.Width, 0, 0);
+						this.images[3] = this.CreateImage(imageBrush, source, blacks, whites, ct);
 					}
 				}
 			}
 		}
 		/// <summary>
-		/// 清空阴影的缓存。
+		/// 清除渲染使用的资源。
 		/// </summary>
-		private void ClearShadowCache()
+		public override void ClearResources()
 		{
-			foreach (Tuple<Bitmap, Vector2> tuple in shadowCache.Values)
+			base.ClearResources();
+			foreach (Tuple<Bitmap, Vector2> pair in shadowCache.Values)
 			{
-				tuple.Item1.Dispose();
+				pair.Item1.Dispose();
 			}
-			this.shadowCache.Clear();
-		}
-		/// <summary>
-		/// 清空拼图的图片。
-		/// </summary>
-		private void ClearImages()
-		{
+			shadowCache.Clear();
 			for (int i = 0; i < images.Length; i++)
 			{
 				if (images[i] != null)
@@ -274,58 +310,65 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 		/// 创建具有指定角度凸起效果的图像。
 		/// </summary>
 		/// <param name="imageBrush">原始的拼图图像笔刷。</param>
-		/// <param name="rotate">凸起效果的旋转角度。</param>
-		/// <param name="pieces">所有拼图碎片的集合。</param>
+		/// <param name="source">用于生成图像的源位图。</param>
+		/// <param name="blacks">黑色图形集合。</param>
+		/// <param name="whites">白色图形集合。</param>
+		/// <param name="ct">取消任务的通知。</param>
 		/// <returns>具有指定角度凸起效果的图像。</returns>
-		private Bitmap CreateImage(Brush imageBrush, int rotate, IEnumerable<JigsawPiece> pieces)
+		private Bitmap CreateImage(Brush imageBrush, Bitmap1 source,
+			IList<Geometry> blacks, IList<Geometry> whites, CancellationToken ct)
 		{
-			if (rotate == 0)
+			ct.ThrowIfCancellationRequested();
+			Bitmap1 target = null;
+			try
 			{
-				pointSpecularEffect.LightPosition = new Vector3(0, 0, 0);
+				target = DeviceManager.CreateBitmap(imageSize);
+				// 一次性绘制所有不相邻的拼图碎片。
+				ct.ThrowIfCancellationRequested();
+				this.CreateImage(imageBrush, source, target, blacks, ct);
+				ct.ThrowIfCancellationRequested();
+				this.CreateImage(imageBrush, source, target, whites, ct);
+				return target;
 			}
-			else if (rotate == 90)
+			catch
 			{
-				pointSpecularEffect.LightPosition = new Vector3(imageSize.Width, 0, 0);
-			}
-			else if (rotate == 180)
-			{
-				pointSpecularEffect.LightPosition = new Vector3(imageSize.Width, imageSize.Height, 0);
-			}
-			else
-			{
-				pointSpecularEffect.LightPosition = new Vector3(0, imageSize.Height, 0);
-			}
-			// 创建临时的位图。
-			using (Bitmap1 bmpTarget = new Bitmap1(this.DeviceContext, imageSize, SharpDXUtility.BitmapProps1))
-			{
-				using (Bitmap1 bmpTarget2 = new Bitmap1(this.DeviceContext, imageSize, SharpDXUtility.BitmapProps1))
+				if (target != null)
 				{
-					// 设置特效的输入。
-					bevelBaseEffect.SetInput(0, bmpTarget, true);
-					bevelEffect.SetInput(0, bmpTarget, true);
-					foreach (JigsawPiece piece in pieces)
-					{
-						Geometry[] geometries = piece.OriginalPath.GetSourceGeometry();
-						for (int i = 0; i < geometries.Length; i++)
-						{
-							// 将拼图碎片的每一部分绘制到位图上。
-							this.DeviceContext.Target = bmpTarget;
-							this.DeviceContext.BeginDraw();
-							this.DeviceContext.Clear(Color.Transparent);
-							this.DeviceContext.FillGeometry(geometries[i], imageBrush);
-							this.DeviceContext.EndDraw();
-
-							// 将添加特效后的拼图碎片绘制到位图上。
-							this.DeviceContext.Target = bmpTarget2;
-							this.DeviceContext.BeginDraw();
-							this.DeviceContext.DrawImage(bevelEffect);
-							this.DeviceContext.EndDraw();
-						}
-					}
-					// 复制位图，因为直接用会出错，具体原因不明。
-					return DeviceManager.WicFactory2.CopyBitmap(bmpTarget2, this.DeviceContext.Device, this.RenderTarget);
+					target.Dispose();
 				}
+				throw;
 			}
+		}
+		/// <summary>
+		/// 从指定的形状创建具有凸起效果的图像。
+		/// </summary>
+		/// <param name="imageBrush">原始的拼图图像笔刷。</param>
+		/// <param name="source">源位图。</param>
+		/// <param name="target">目标位图。</param>
+		/// <param name="geoms">形状列表。</param>
+		/// <param name="ct">取消任务的通知。</param>
+		private void CreateImage(Brush imageBrush, Bitmap1 source, Bitmap1 target,
+			IList<Geometry> geoms, CancellationToken ct)
+		{
+			this.DeviceContext.Target = source;
+			this.DeviceContext.BeginDraw();
+			this.DeviceContext.Clear(Color.Transparent);
+			int cnt = geoms.Count;
+			for (int i = 0; i < cnt; i++)
+			{
+				if (ct.IsCancellationRequested)
+				{
+					break;
+				}
+				this.DeviceContext.FillGeometry(geoms[i], imageBrush);
+			}
+			this.DeviceContext.EndDraw();
+			// 将添加特效后的拼图碎片绘制到位图上。
+			ct.ThrowIfCancellationRequested();
+			this.DeviceContext.Target = target;
+			this.DeviceContext.BeginDraw();
+			this.DeviceContext.DrawImage(bevelEffect);
+			this.DeviceContext.EndDraw();
 		}
 		/// <summary>
 		/// 返回指定拼图碎片的阴影位图。
@@ -334,43 +377,46 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 		/// <returns>指定拼图碎片的阴影位图。</returns>
 		private Tuple<Bitmap, Vector2> GetShadow(JigsawPiece piece)
 		{
-			Tuple<Bitmap, Vector2> shadow;
-			if (!shadowCache.TryGetValue(piece.OriginalPath, out shadow))
+			Tuple<Bitmap, Vector2> tuple;
+			if (!shadowCache.TryGetValue(piece.OriginalPath, out tuple))
 			{
+				// 移除已被释放的拼图碎片。
+				Geometry disposedGeom = null;
+				if ((disposedGeom = shadowCache.Keys.FirstOrDefault(g => g.IsDisposed)) != null)
+				{
+					shadowCache.Remove(disposedGeom);
+				}
 				RectangleF bounds = piece.OriginalPath.GetBounds();
 				Size2 size = new Size2((int)bounds.Width + ShadowPadding * 2, (int)bounds.Height + ShadowPadding * 2);
-				using (Bitmap1 bmpTarget = new Bitmap1(this.DeviceContext, size, SharpDXUtility.BitmapProps1))
+				using (Bitmap1 source = DeviceManager.CreateBitmap(size))
 				{
-					using (Bitmap1 bmpTarget2 = new Bitmap1(this.DeviceContext, size, SharpDXUtility.BitmapProps1))
+					Bitmap1 target = DeviceManager.CreateBitmap(size);
+					// 设置特效的输入。
+					shadowEffect.SetInput(0, source, true);
+					// 阴影的偏移。
+					Vector2 offset = new Vector2(bounds.Left - ShadowPadding, bounds.Top - ShadowPadding);
+					using (TransformedGeometry tGeom = new TransformedGeometry(this.DeviceContext.Factory,
+						piece.OriginalPath, Matrix3x2.Translation(-offset.X, -offset.Y)))
 					{
-						// 设置特效的输入。
-						shadowEffect.SetInput(0, bmpTarget, true);
-						// 阴影的偏移。
-						Vector2 offset = new Vector2(bounds.Left - ShadowPadding, bounds.Top - ShadowPadding);
-						using (TransformedGeometry geom = new TransformedGeometry(this.DeviceContext.Factory,
-							piece.OriginalPath, Matrix3x2.Translation(-offset.X, -offset.Y)))
-						{
-							// 将拼图碎片绘制到位图上。
-							this.DeviceContext.Target = bmpTarget;
-							this.DeviceContext.BeginDraw();
-							this.DeviceContext.Clear(Color.Transparent);
-							this.DeviceContext.FillGeometry(geom, blackBrush);
-							this.DeviceContext.EndDraw();
+						// 将拼图碎片绘制到位图上。
+						this.DeviceContext.Target = source;
+						this.DeviceContext.BeginDraw();
+						this.DeviceContext.Clear(Color.Transparent);
+						this.DeviceContext.FillGeometry(tGeom, blackBrush);
+						this.DeviceContext.EndDraw();
 
-							// 将添加特效后的拼图碎片绘制到位图上。
-							this.DeviceContext.Target = bmpTarget2;
-							this.DeviceContext.BeginDraw();
-							this.DeviceContext.DrawImage(shadowEffect);
-							this.DeviceContext.EndDraw();
-							// 复制位图，因为直接用会出错。
-							Bitmap bmp = DeviceManager.WicFactory2.CopyBitmap(bmpTarget2, this.DeviceContext.Device, this.RenderTarget);
-							shadow = new Tuple<Bitmap, Vector2>(bmp, offset);
-							shadowCache.Add(piece.OriginalPath, shadow);
-						}
+						// 将添加特效后的拼图碎片绘制到位图上。
+						this.DeviceContext.Target = target;
+						this.DeviceContext.BeginDraw();
+						this.DeviceContext.DrawImage(shadowEffect);
+						this.DeviceContext.EndDraw();
+
+						tuple = new Tuple<Bitmap, Vector2>(target, offset);
+						shadowCache.Add(piece.OriginalPath, tuple);
 					}
 				}
 			}
-			return shadow;
+			return tuple;
 		}
 
 		#endregion // 生成 Direct2D 特效

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+﻿using System.Threading;
 using Cyjb.Projects.JigsawGame.Jigsaw;
 using SharpDX;
 using SharpDX.Direct2D1;
@@ -14,10 +14,6 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 		/// 绘制拼图碎片的笔刷。
 		/// </summary>
 		private BitmapBrush brush;
-		/// <summary>
-		/// 拼图的图片。
-		/// </summary>
-		private Bitmap jigsawImage;
 		/// <summary>
 		/// 普通边界的笔刷。
 		/// </summary>
@@ -76,14 +72,12 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 			{
 				this.brush.Dispose();
 			}
-			if (this.jigsawImage != null)
-			{
-				this.jigsawImage.Dispose();
-			}
 			base.Dispose(true);
 		}
 
 		#endregion // IDisposable 成员
+
+		#region 渲染器属性
 
 		/// <summary>
 		/// 获取拼图渲染器的类型。
@@ -125,27 +119,39 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 				selectedBrush.Color = value;
 			}
 		}
+
+		#endregion // 渲染器属性
+
 		/// <summary>
 		/// 准备渲染拼图碎片。
 		/// </summary>
 		/// <param name="imageData">拼图使用的图片数据。</param>
 		/// <param name="pieces">所有拼图碎片的集合。</param>
 		/// <param name="rotatable">拼图碎片是否可以旋转。</param>
-		public override void PrepareRender(byte[] imageData, IEnumerable<JigsawPiece> pieces, bool rotatable)
+		/// <param name="ct">取消任务的通知。</param>
+		public override void PrepareRender(byte[] imageData, JigsawPieceCollection pieces, bool rotatable,
+			CancellationToken ct)
 		{
-			base.PrepareRender(imageData, pieces, rotatable);
-			if (this.jigsawImage != null)
-			{
-				this.jigsawImage.Dispose();
-			}
-			this.jigsawImage = LoadImage(this.RenderTarget);
+			base.PrepareRender(imageData, pieces, rotatable, ct);
 			if (this.brush == null)
 			{
-				this.brush = new BitmapBrush(this.RenderTarget, this.jigsawImage);
+				this.brush = new BitmapBrush(this.RenderTarget, this.Image);
 			}
 			else
 			{
-				this.brush.Bitmap = this.jigsawImage;
+				this.brush.Bitmap = this.Image;
+			}
+		}
+		/// <summary>
+		/// 清除渲染使用的资源。
+		/// </summary>
+		public override void ClearResources()
+		{
+			base.ClearResources();
+			if (this.brush != null)
+			{
+				this.brush.Dispose();
+				this.brush = null;
 			}
 		}
 		/// <summary>

@@ -116,9 +116,19 @@ namespace Cyjb.Projects.JigsawGame
 		/// </summary>
 		private void btnPic_Click(object sender, EventArgs e)
 		{
+			imageOpenDialog.InitFileName(JigsawSetting.Default.ImageFileName);
 			if (imageOpenDialog.ShowDialog() == DialogResult.OK)
 			{
-				image = Image.FromFile(imageOpenDialog.FileName);
+				JigsawSetting.Default.ImageFileName = imageOpenDialog.FileName;
+				try
+				{
+					image = Image.FromFile(imageOpenDialog.FileName);
+				}
+				catch (OutOfMemoryException)
+				{
+					MessageBox.Show("不是有效的图片格式", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+					return;
+				}
 				lblPic.Text = string.Concat("选择图片：", imageOpenDialog.FileName,
 					MultiplyFormat(image.Width, image.Height));
 				// 图片缩放后的大小

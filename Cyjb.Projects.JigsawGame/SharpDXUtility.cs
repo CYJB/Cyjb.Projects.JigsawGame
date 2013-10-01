@@ -1,16 +1,10 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using SharpDX;
+﻿using SharpDX;
 using SharpDX.Direct2D1;
-using SharpDX.IO;
-using SharpDX.Win32;
-using DXGI = SharpDX.DXGI;
-using WIC = SharpDX.WIC;
 
 namespace Cyjb.Projects.JigsawGame
 {
 	/// <summary>
-	/// 包含 Sharp2D 的实用方法。
+	/// 包含 SharpDX 的实用方法。
 	/// </summary>
 	public static class SharpDXUtility
 	{
@@ -79,138 +73,6 @@ namespace Cyjb.Projects.JigsawGame
 		}
 
 		#endregion // 几何操作
-
-		#region 位图操作
-
-		/// <summary>
-		/// Direct2D 的像素格式。
-		/// </summary>
-		public static readonly PixelFormat D2D1PixelFormat =
-			new PixelFormat(DXGI.Format.B8G8R8A8_UNorm, AlphaMode.Premultiplied);
-		/// <summary>
-		/// 位图的属性。
-		/// </summary>
-		public static readonly BitmapProperties BitmapProps = new BitmapProperties(D2D1PixelFormat, 96, 96);
-		/// <summary>
-		/// 位图的属性。
-		/// </summary>
-		public static readonly BitmapProperties1 BitmapProps1 = new BitmapProperties1(D2D1PixelFormat, 96, 96,
-			BitmapOptions.Target);
-		/// <summary>
-		/// 从给定的文件中加载 Direct2D 位图。
-		/// </summary>
-		/// <param name="factory">Windows 图片组件工厂。</param>
-		/// <param name="fileName">要加载位图的文件。</param>
-		/// <param name="renderTarget">创建位图的渲染目标。</param>
-		/// <returns>得到的 Direct2D 位图。</returns>
-		public static Bitmap LoadBitmapFromFile(this WIC.ImagingFactory factory, string fileName, RenderTarget renderTarget)
-		{
-			using (FileStream stream = new FileStream(fileName, FileMode.Open))
-			{
-				return LoadBitmapFromStream(factory, stream, renderTarget);
-			}
-		}
-		/// <summary>
-		/// 从给定的 Byte 数组中加载 Direct2D 位图。
-		/// </summary>
-		/// <param name="factory">Windows 图片组件工厂。</param>
-		/// <param name="data">要加载位图的数据。</param>
-		/// <param name="renderTarget">创建位图的渲染目标。</param>
-		/// <returns>得到的 Direct2D 位图。</returns>
-		public static Bitmap LoadBitmapFromBytes(this WIC.ImagingFactory factory, byte[] data, RenderTarget renderTarget)
-		{
-			using (MemoryStream stream = new MemoryStream(data))
-			{
-				return LoadBitmapFromStream(factory, stream, renderTarget);
-			}
-		}
-		/// <summary>
-		/// 从给定的流中加载 Direct2D 位图。
-		/// </summary>
-		/// <param name="factory">Windows 图片组件工厂。</param>
-		/// <param name="stream">要加载位图的流。</param>
-		/// <param name="renderTarget">创建位图的渲染目标。</param>
-		/// <returns>得到的 Direct2D 位图。</returns>
-		public static Bitmap LoadBitmapFromStream(this WIC.ImagingFactory factory, Stream stream, RenderTarget renderTarget)
-		{
-			using (WIC.BitmapDecoder decoder = new WIC.BitmapDecoder(factory, stream, WIC.DecodeOptions.CacheOnLoad))
-			{
-				using (WIC.FormatConverter formatConverter = new WIC.FormatConverter(factory))
-				{
-					formatConverter.Initialize(decoder.GetFrame(0), WIC.PixelFormat.Format32bppPBGRA);
-					return Bitmap.FromWicBitmap(renderTarget, formatConverter);
-				}
-			}
-		}
-		/// <summary>
-		/// 将 Direct2D 位图保存到文件中。
-		/// </summary>
-		/// <param name="factory">Windows 图片组件工厂。</param>
-		/// <param name="image">要保存的位图。</param>
-		/// <param name="device">Direct2D 设备。</param>
-		/// <param name="fileName">要保存的文件名。</param>
-		public static void SaveBitmapToFile(this WIC.ImagingFactory2 factory, Bitmap image, Device device, string fileName)
-		{
-			using (WIC.WICStream stream = new WIC.WICStream(factory, fileName, NativeFileAccess.Write))
-			{
-				SaveBitmapToStream(factory, image, device, stream);
-			}
-		}
-		/// <summary>
-		/// 将 Direct2D 位图保存到指定的流中。
-		/// </summary>
-		/// <param name="factory">Windows 图片组件工厂。</param>
-		/// <param name="image">要保存的位图。</param>
-		/// <param name="device">Direct2D 设备。</param>
-		/// <param name="fileName">要保存到的流。</param>
-		public static void SaveBitmapToStream(this WIC.ImagingFactory2 factory, Bitmap image, Device device, IStream stream)
-		{
-			using (WIC.BitmapEncoder encoder = new WIC.PngBitmapEncoder(factory))
-			{
-				encoder.Initialize(stream);
-				using (WIC.BitmapFrameEncode bitmapFrameEncode = new WIC.BitmapFrameEncode(encoder))
-				{
-					bitmapFrameEncode.Initialize();
-					int width = image.PixelSize.Width;
-					int height = image.PixelSize.Height;
-					bitmapFrameEncode.SetSize(width, height);
-					var wicPixelFormat = WIC.PixelFormat.Format32bppPRGBA;
-					bitmapFrameEncode.SetPixelFormat(ref wicPixelFormat);
-					using (WIC.ImageEncoder imageEncoder = new WIC.ImageEncoder(factory, device))
-					{
-						imageEncoder.WriteFrame(image, bitmapFrameEncode,
-							new WIC.ImageParameters(D2D1PixelFormat, 96, 96, 0, 0, width, height));
-						bitmapFrameEncode.Commit();
-						encoder.Commit();
-					}
-				}
-			}
-		}
-		/// <summary>
-		/// 复制指定的位图。
-		/// </summary>
-		/// <param name="factory">Windows 图片组件工厂。</param>
-		/// <param name="source">要赋值的位图。</param>
-		/// <param name="device">Direct2D 设备。</param>
-		/// <param name="renderTarget">要复制到的目标渲染目标。</param>
-		/// <returns>复制得到的位图。</returns>
-		[SuppressMessage("Microsoft.Usage", "CA2202:不要多次释放对象")]
-		public static Bitmap CopyBitmap(this WIC.ImagingFactory2 factory, Bitmap source, Device device, RenderTarget renderTarget)
-		{
-			int width = source.PixelSize.Width;
-			int height = source.PixelSize.Height;
-			using (MemoryStream memStream = new MemoryStream())
-			{
-				using (WIC.WICStream stream = new WIC.WICStream(factory, memStream))
-				{
-					SaveBitmapToStream(factory, source, device, stream);
-				}
-				memStream.Seek(0, SeekOrigin.Begin);
-				return LoadBitmapFromStream(factory, memStream, renderTarget);
-			}
-		}
-
-		#endregion // 位图操作
 
 		#region 颜色操作
 

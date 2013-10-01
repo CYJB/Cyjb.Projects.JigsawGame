@@ -172,7 +172,13 @@
     <Compile Include="ThumbForm.Designer.cs">
       <DependentUpon>ThumbForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="WaitForm.cs" />
+    <Compile Include="ToolForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ToolForm.Designer.cs">
+      <DependentUpon>ToolForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="WinFormUtility.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
@@ -193,7 +199,6 @@
     <None Include="Resources\ShowBackground.png" />
     <None Include="Resources\ShowThumb.png" />
     <None Include="Resources\ShowBorderOnly.png" />
-    <None Include="Resources\JigsawGame.png" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="BugReportForm.resx">

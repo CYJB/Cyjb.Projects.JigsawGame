@@ -197,7 +197,6 @@
 			// 
 			this.renderPanel.AutoScroll = true;
 			this.renderPanel.AutoScrollMinSize = new System.Drawing.Size(200, 200);
-			this.renderPanel.D2DFactory = null;
 			this.renderPanel.Dock = System.Windows.Forms.DockStyle.Fill;
 			this.renderPanel.ImageSize = ((SharpDX.Size2F)(resources.GetObject("renderPanel.ImageSize")));
 			this.renderPanel.Location = new System.Drawing.Point(0, 25);

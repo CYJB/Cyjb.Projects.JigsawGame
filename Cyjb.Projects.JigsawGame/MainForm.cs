@@ -5,6 +5,8 @@ using System.IO;
 using System.Runtime.Serialization;
 using System.Security;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Cyjb.Projects.JigsawGame.Jigsaw;
 using Cyjb.Projects.JigsawGame.Renderer;
@@ -43,7 +45,11 @@ namespace Cyjb.Projects.JigsawGame
 		/// <summary>
 		/// 等待窗体。
 		/// </summary>
-		private WaitForm loadingForm;
+		private LoadingForm loadingForm;
+		/// <summary>
+		/// 取消任务的通知。
+		/// </summary>
+		private CancellationTokenSource tokenCancelSource;
 		/// <summary>
 		/// 初始化主窗体。
 		/// </summary>
@@ -162,6 +168,10 @@ namespace Cyjb.Projects.JigsawGame
 				{
 					this.loadingForm.Dispose();
 				}
+				if (this.tokenCancelSource != null)
+				{
+					this.tokenCancelSource.Dispose();
+				}
 				this.gameManager.Dispose();
 				this.deviceManager.Dispose();
 			}
@@ -213,6 +223,7 @@ namespace Cyjb.Projects.JigsawGame
 				text.Append(time.Seconds);
 				text.Append(" 秒！");
 				MessageBox.Show(text.ToString(), "拼图游戏", MessageBoxButtons.OK, MessageBoxIcon.Information);
+				GC.Collect();
 			}
 		}
 		/// <summary>
@@ -223,15 +234,12 @@ namespace Cyjb.Projects.JigsawGame
 		public void StartGame(JigsawPieceCollection pieces, JigsawInfo info)
 		{
 			this.StopGame(true);
+			this.gamePath = null;
 			this.ShowLoadingForm();
-			gameManager.StartGame(pieces, info);
-			// 更新界面。
-			UpdateTime(this, null);
-			saveGameTSBtn.Enabled = scaleSTBtn.Enabled = timeSTLabel.Enabled = finishSTLabel.Enabled = true;
-			loadingForm.Hide();
-			gameTimer.Start();
-			UpdateThumbImage(true);
-			gameManager.InvalidateAll();
+			Task task = gameManager.StartGame(pieces, info, this.tokenCancelSource.Token);
+			task.ContinueWith(t => BeginGame(), TaskContinuationOptions.OnlyOnRanToCompletion);
+			task.ContinueWith(t => HideLoadingForm());
+			task.Start();
 		}
 		/// <summary>
 		/// 打开拼图游戏。
@@ -240,31 +248,44 @@ namespace Cyjb.Projects.JigsawGame
 		public void OpenGame(string fileName)
 		{
 			this.StopGame(true);
+			Task task = null;
 			this.ShowLoadingForm();
 			try
 			{
-				gameManager.OpenGame(fileName);
+				task = gameManager.OpenGame(fileName, this.tokenCancelSource.Token);
+				JigsawSetting.Default.FileName = this.gamePath = fileName;
 			}
 			catch (SecurityException)
 			{
-				loadingForm.Hide();
+				this.HideLoadingForm();
 				MessageBox.Show("游戏没有读取该文件的权限", "警告", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 				return;
 			}
 			catch (SerializationException)
 			{
-				loadingForm.Hide();
+				this.HideLoadingForm();
 				MessageBox.Show("指定的游戏存档文件无效", "警告", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 				return;
 			}
-			JigsawSetting.Default.FileName = this.gamePath = fileName;
-			// 更新界面。
+			task.ContinueWith(t => BeginGame(), TaskContinuationOptions.OnlyOnRanToCompletion);
+			task.ContinueWith(t => HideLoadingForm());
+			task.Start();
+		}
+		/// <summary>
+		/// 开始拼图游戏。
+		/// </summary>
+		private void BeginGame()
+		{
+			if (this.InvokeRequired)
+			{
+				this.Invoke(new Action(BeginGame));
+				return;
+			}
 			UpdateTime(this, null);
 			saveGameTSBtn.Enabled = scaleSTBtn.Enabled = timeSTLabel.Enabled = finishSTLabel.Enabled = true;
-			loadingForm.Hide();
-			gameTimer.Start();
 			UpdateThumbImage(true);
 			gameManager.InvalidateAll();
+			gameTimer.Start();
 		}
 		/// <summary>
 		/// 结束拼图游戏。
@@ -314,13 +335,43 @@ namespace Cyjb.Projects.JigsawGame
 		/// </summary>
 		private void ShowLoadingForm()
 		{
+			this.newGameTSBtn.Enabled = this.openGameTSBtn.Enabled = false;
 			if (this.loadingForm == null)
 			{
-				this.loadingForm = new WaitForm(new LoadingForm());
+				this.loadingForm = new LoadingForm();
 			}
-			this.loadingForm.Form.Location = new Point(this.Location.X + (this.Size.Width - loadingForm.Form.Width) / 2,
-				this.Location.Y + (this.Size.Height - loadingForm.Form.Height) / 2);
-			this.loadingForm.Show();
+			this.loadingForm.Show(this);
+			this.loadingForm.CenterParent();
+			// 创建新的任务取消的通知。
+			if (this.tokenCancelSource != null)
+			{
+				this.tokenCancelSource.Cancel();
+				this.tokenCancelSource.Dispose();
+			}
+			this.tokenCancelSource = new CancellationTokenSource();
+		}
+		/// <summary>
+		/// 隐藏等待窗体。
+		/// </summary>
+		private void HideLoadingForm()
+		{
+			if (this.InvokeRequired)
+			{
+				this.Invoke(new Action(HideLoadingForm));
+				return;
+			}
+			this.newGameTSBtn.Enabled = this.openGameTSBtn.Enabled = true;
+			if (this.loadingForm != null)
+			{
+				this.loadingForm.Close();
+				this.loadingForm.Dispose();
+				this.loadingForm = null;
+			}
+			if (this.tokenCancelSource != null)
+			{
+				this.tokenCancelSource.Dispose();
+				this.tokenCancelSource = null;
+			}
 		}
 		/// <summary>
 		/// 保存拼图游戏。
@@ -349,10 +400,7 @@ namespace Cyjb.Projects.JigsawGame
 				{
 					if (gamePath == null)
 					{
-						if (!string.IsNullOrWhiteSpace(JigsawSetting.Default.FileName))
-						{
-							gameSaveDialog.FileName = JigsawSetting.Default.FileName;
-						}
+						gameSaveDialog.InitFileName(JigsawSetting.Default.FileName);
 						if (gameSaveDialog.ShowDialog() == DialogResult.OK)
 						{
 							gamePath = gameSaveDialog.FileName;
@@ -473,10 +521,7 @@ namespace Cyjb.Projects.JigsawGame
 			if (this.SaveGame(true))
 			{
 				this.PauseGame();
-				if (!string.IsNullOrWhiteSpace(JigsawSetting.Default.FileName))
-				{
-					gameOpenDialog.FileName = JigsawSetting.Default.FileName;
-				}
+				gameOpenDialog.InitFileName(JigsawSetting.Default.FileName);
 				if (gameOpenDialog.ShowDialog() == DialogResult.OK)
 				{
 					this.OpenGame(gameOpenDialog.FileName);
@@ -569,9 +614,7 @@ namespace Cyjb.Projects.JigsawGame
 				if (JigsawSetting.Default.Renderer != renderType)
 				{
 					JigsawSetting.Default.Renderer = renderType;
-					ShowLoadingForm();
 					gameManager.RendererType = form.RendererType;
-					loadingForm.Hide();
 				}
 				gameManager.BackgroundColor = JigsawSetting.Default.BackgroundColor;
 				gameManager.BackgroundAlpha = JigsawSetting.Default.BackgroundAlpha;
@@ -593,40 +636,56 @@ namespace Cyjb.Projects.JigsawGame
 		/// </summary>
 		private void renderPanel_KeyDown(object sender, KeyEventArgs e)
 		{
+			Console.WriteLine(e.KeyData);
 			switch (e.KeyCode)
 			{
 				case Keys.N:
-					if (e.Control)
+					if (e.Control && !e.Shift && !e.Alt)
 					{
 						newGameTSBtn_Click(this, null);
 					}
 					break;
 				case Keys.O:
-					if (e.Control)
+					if (e.Control && !e.Shift && !e.Alt)
 					{
 						openGameTSBtn_Click(this, null);
 					}
 					break;
 				case Keys.S:
-					if (e.Control)
+					if (e.Control && !e.Shift && !e.Alt)
 					{
 						saveGameTSBtn_Click(this, null);
 					}
 					break;
 				case Keys.F1:
-					helpTSBtn_Click(this, null);
+					if (!e.Control && !e.Shift && !e.Alt)
+					{
+						helpTSBtn_Click(this, null);
+					}
 					break;
 				case Keys.F2:
-					showThumbTSBtn_Click(this, null);
+					if (!e.Control && !e.Shift && !e.Alt)
+					{
+						showThumbTSBtn_Click(this, null);
+					}
 					break;
 				case Keys.F3:
-					showBackgroundSTBtn_Click(this, null);
+					if (!e.Control && !e.Shift && !e.Alt)
+					{
+						showBackgroundSTBtn_Click(this, null);
+					}
 					break;
 				case Keys.F4:
-					showBorderSTBtn_Click(this, null);
+					if (!e.Control && !e.Shift && !e.Alt)
+					{
+						showBorderSTBtn_Click(this, null);
+					}
 					break;
 				case Keys.F5:
-					settingsTSBtn_Click(this, null);
+					if (!e.Control && !e.Shift && !e.Alt)
+					{
+						settingsTSBtn_Click(this, null);
+					}
 					break;
 			}
 		}
@@ -647,6 +706,12 @@ namespace Cyjb.Projects.JigsawGame
 			{
 				StopGame(true);
 			}
+			if (tokenCancelSource != null)
+			{
+				tokenCancelSource.Cancel();
+				tokenCancelSource.Dispose();
+				tokenCancelSource = null;
+			}
 			// 关闭缩略图窗口。
 			if (thumbForm != null)
 			{
@@ -664,10 +729,14 @@ namespace Cyjb.Projects.JigsawGame
 				thumbForm.Location = new Point(JigsawSetting.Default.ThumbLocation.X + this.Location.X,
 					JigsawSetting.Default.ThumbLocation.Y + this.Location.Y);
 			}
+			if (loadingForm != null)
+			{
+				loadingForm.CenterParent();
+			}
 			if (this.WindowState == FormWindowState.Normal)
 			{
 				// 仅记录普通状态下的窗体尺寸和位置。
-				JigsawSetting.Default.MainSize = this.Size;
+				JigsawSetting.Default.MainSize = this.ClientSize;
 				JigsawSetting.Default.MainLocation = this.Location;
 			}
 		}
@@ -676,10 +745,14 @@ namespace Cyjb.Projects.JigsawGame
 		/// </summary>
 		private void MainForm_SizeChanged(object sender, EventArgs e)
 		{
+			if (loadingForm != null)
+			{
+				loadingForm.CenterParent();
+			}
 			if (this.WindowState == FormWindowState.Normal)
 			{
 				// 仅记录普通状态下的窗体尺寸和位置。
-				JigsawSetting.Default.MainSize = this.Size;
+				JigsawSetting.Default.MainSize = this.ClientSize;
 				JigsawSetting.Default.MainLocation = this.Location;
 			}
 		}

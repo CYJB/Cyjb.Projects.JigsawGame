@@ -185,7 +185,9 @@ namespace Cyjb.Projects.JigsawGame.Shape
 					}
 					else
 					{
-						Path path = new Path(corners[j]);
+						// 将拼图碎片放置在国际象棋盘上，每片会分别对应黑色和白色。
+						bool isBlack = (i + j) % 2 == 0;
+						Path path = new Path(corners[j], isBlack);
 						// 逆时针添加边。
 						// 顶边。
 						if (i == 1)

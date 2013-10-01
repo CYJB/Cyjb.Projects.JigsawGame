@@ -13,10 +13,17 @@ namespace Cyjb.Projects.JigsawGame.Shape
 		/// <summary>
 		/// 使用指定的终结点初始化 <see cref="EndFigureSegment"/> 类的新实例。
 		/// </summary>
-		/// <param name="end">形状结束段的终结点。</param>
-		public EndFigureSegment(Vector2 endPoint)
+		/// <param name="endPoint">形状结束段的终结点。</param>
+		/// <param name="isBlack">下一段路径是否为黑色。</param>
+		public EndFigureSegment(Vector2 endPoint, bool isBlack)
 			: base(PathType.EndFigure, endPoint)
-		{ }
+		{
+			this.IsBlack = isBlack;
+		}
+		/// <summary>
+		/// 获取下一段路径是否为黑色。
+		/// </summary>
+		public bool IsBlack { get; private set; }
 		/// <summary>
 		/// 使用当前的路径填充指定的路径几何。
 		/// </summary>
