@@ -70,8 +70,8 @@ namespace Cyjb.Projects.JigsawGame.Jigsaw
 		/// <param name="type">拼图碎片的类型。</param>
 		public JigsawPiece(Factory factory, Path path, JigsawPieceType type)
 		{
-			ExceptionHelper.CheckArgumentNull(factory, "factory");
-			ExceptionHelper.CheckArgumentNull(path, "path");
+			CommonExceptions.CheckArgumentNull(factory, "factory");
+			CommonExceptions.CheckArgumentNull(path, "path");
 			this.factory = factory;
 			this.shape = path;
 			this.originalPath = this.shape.GetGeometryGroup(this.factory);
@@ -91,7 +91,7 @@ namespace Cyjb.Projects.JigsawGame.Jigsaw
 		/// <exception cref="System.ArgumentNullException">info 参数为 <c>null</c>。</exception>
 		private JigsawPiece(SerializationInfo info, StreamingContext context)
 		{
-			ExceptionHelper.CheckArgumentNull(info, "info");
+			CommonExceptions.CheckArgumentNull(info, "info");
 			this.factory = ((JigsawSerializeContext)context.Context).Factory;
 			this.shape = (Path)info.GetValue("Shape", typeof(Path));
 			this.pieceType = (JigsawPieceType)info.GetValue("Type", typeof(JigsawPieceType));
@@ -380,7 +380,7 @@ namespace Cyjb.Projects.JigsawGame.Jigsaw
 		[SecurityPermission(SecurityAction.LinkDemand, Flags = SecurityPermissionFlag.SerializationFormatter)]
 		void ISerializable.GetObjectData(SerializationInfo info, StreamingContext context)
 		{
-			ExceptionHelper.CheckArgumentNull(info, "info");
+			CommonExceptions.CheckArgumentNull(info, "info");
 			info.AddValue("Shape", this.shape);
 			info.AddValue("Type", this.pieceType);
 			info.AddValue("Offset", this.offset);

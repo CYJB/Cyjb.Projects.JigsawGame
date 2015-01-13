@@ -76,7 +76,7 @@ namespace Cyjb.Projects.JigsawGame.Shape
 			{
 				if (value < 0f || value > 1f)
 				{
-					throw ExceptionHelper.ArgumentOutOfRange("value", 0, 1);
+					throw CommonExceptions.ArgumentOutOfRange("value", value, 0, 1);
 				}
 				else
 				{
@@ -94,7 +94,7 @@ namespace Cyjb.Projects.JigsawGame.Shape
 			{
 				if (value <= 0)
 				{
-					throw ExceptionHelper.ArgumentOutOfRange("value");
+					throw CommonExceptions.ArgumentOutOfRange("value", value);
 				}
 				this.horizontalDimension = value;
 			}
@@ -109,7 +109,7 @@ namespace Cyjb.Projects.JigsawGame.Shape
 			{
 				if (value <= 0)
 				{
-					throw ExceptionHelper.ArgumentOutOfRange("value");
+					throw CommonExceptions.ArgumentOutOfRange("value", value);
 				}
 				this.verticalDimension = value;
 			}
@@ -124,7 +124,7 @@ namespace Cyjb.Projects.JigsawGame.Shape
 			{
 				if (value.Height <= 0f || value.Width <= 0f)
 				{
-					throw ExceptionHelper.ArgumentOutOfRange("value");
+					throw CommonExceptions.ArgumentOutOfRange("value", value);
 				}
 				this.size = value;
 			}
