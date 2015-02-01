@@ -44,8 +44,14 @@ namespace Cyjb.Projects.JigsawGame.Jigsaw
 		/// <param name="shape">拼图形状。</param>
 		public JigsawPieceCollection(Factory factory, JigsawShape shape)
 		{
-			CommonExceptions.CheckArgumentNull(factory, "factory");
-			CommonExceptions.CheckArgumentNull(shape, "shape");
+			if (factory == null)
+			{
+				throw CommonExceptions.ArgumentNull("factory");
+			}
+			if (shape == null)
+			{
+				throw CommonExceptions.ArgumentNull("shape");
+			}
 			InitializePieces(factory, shape);
 		}
 		/// <summary>
@@ -58,7 +64,10 @@ namespace Cyjb.Projects.JigsawGame.Jigsaw
 		/// <exception cref="System.ArgumentNullException">info 参数为 <c>null</c>。</exception>
 		private JigsawPieceCollection(SerializationInfo info, StreamingContext context)
 		{
-			CommonExceptions.CheckArgumentNull(info, "info");
+			if (info == null)
+			{
+				throw CommonExceptions.ArgumentNull("info");
+			}
 			this.scale = info.GetSingle("Scale");
 			this.front = (JigsawPiece)info.GetValue("Front", typeof(JigsawPiece));
 			this.back = (JigsawPiece)info.GetValue("Back", typeof(JigsawPiece));
@@ -525,7 +534,10 @@ namespace Cyjb.Projects.JigsawGame.Jigsaw
 		[SecurityPermission(SecurityAction.LinkDemand, Flags = SecurityPermissionFlag.SerializationFormatter)]
 		void ISerializable.GetObjectData(SerializationInfo info, StreamingContext context)
 		{
-			CommonExceptions.CheckArgumentNull(info, "info");
+			if (info == null)
+			{
+				throw CommonExceptions.ArgumentNull("info");
+			}
 			info.AddValue("Scale", this.scale);
 			info.AddValue("Front", this.front);
 			info.AddValue("Back", this.back);

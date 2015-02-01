@@ -110,7 +110,10 @@ namespace Cyjb.Projects.JigsawGame.Renderer
 		public virtual void PrepareRender(byte[] imageData, JigsawPieceCollection pieces, bool rotatable,
 			CancellationToken ct)
 		{
-			CommonExceptions.CheckArgumentNull(imageData, "image");
+			if (imageData == null)
+			{
+				throw CommonExceptions.ArgumentNull("imageData");
+			}
 			ClearResources();
 			this.Image = this.deviceManager.LoadBitmapFromBytes(imageData);
 		}

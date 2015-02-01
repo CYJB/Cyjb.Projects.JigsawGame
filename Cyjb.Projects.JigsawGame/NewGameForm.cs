@@ -75,7 +75,7 @@ namespace Cyjb.Projects.JigsawGame
 			picture.BackColor = JigsawSetting.Default.BackgroundColor;
 			combShape.DisplayMember = "Text";
 			combShape.ValueMember = "Value";
-			combShape.DataSource = EnumExt.GetTextValues<JigsawShapeType>();
+			combShape.DataSource = EnumExt.GetDescValues<JigsawShapeType>();
 			combDifficulty.SelectedIndex = JigsawSetting.Default.Difficulty;
 			combShape.SelectedIndex = JigsawSetting.Default.Shape;
 			cbxRotate.Checked = JigsawSetting.Default.Rotatable;
